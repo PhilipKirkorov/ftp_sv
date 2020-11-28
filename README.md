@@ -22,8 +22,8 @@ So don't blame me.
   Where
   * LISTEN_PORT - PORT that users will use to connect to the server
   * LISTEN_IP - "0.0.0.0" to let anyone connect, "127.0.0.1" to allow connections only from your PC, "a.b.c.d" to allow connections only from "a.b.c.d" IP
-  * PUBLIC_IP - IP that will be used in PASV mode
-  * DIRECTORY - the directory that the server will share to users
+  * PUBLIC_IP - IP that will be used in the PASV mode
+  * DIRECTORY - directory that the server will share to users
 * Compile and run.
 
 ## How it looks like when it works
