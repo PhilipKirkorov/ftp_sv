@@ -1,34 +1,218 @@
-#pragma once
+#include <stdio.h>
 
-#include <winsock2.h>
+#include "ftp_usr.h"
+#include "ftp_tr.h"
+#include "ftp_sv.h"
 
-typedef struct ftp_sv ftp_sv;
-typedef struct ftp_tr ftp_tr;
+void _usr_on_cmd(ftp_usr*, char*, char*);
 
-#define CL_MAX_CMD 1024
-#define CL_MAX_RESP 1024
-#define CL_MAX_PATH 128
-#define CL_SEND_BUF 2048
+int usr_parse_path(ftp_usr* cl, char* arg, char* d) {
+    if (arg == NULL) {
+        return -1;
+    }
 
-typedef struct ftp_usr {
-    SOCKET sock;
-    ftp_sv* sv;
-    int closing;
+    size_t len_st = strlen(arg);
 
-    char dir[CL_MAX_PATH];
+    if (len_st >= CL_MAX_PATH)
+        return -1;
 
-    char sendBuf[CL_SEND_BUF];
-    int sendLen;
+    int len = (int)len_st;
 
-    ftp_tr* tr;
-} ftp_usr;
+    if (arg[0] == '/') {
+        d[0] = '/';
+        d[1] = '\0';
+        arg++;
+        len--;
+    }
+    else {
+        snprintf(d, CL_MAX_PATH, cl->dir);
+    }
+
+    if (len == 0)
+        return 0;
+
+    if (len > 1 && (arg[len - 1] == '/' || arg[len - 1] == '\\'))
+        len--;
+
+    char* ws = arg;
+    for (int i = 0; i <= len; i++) {
+        if (
+            *arg == ':' ||
+            *arg == '*' ||
+            *arg == '?' ||
+            *arg == '"' ||
+            *arg == '<' ||
+            *arg == '>' ||
+            *arg == '|')
+        {
+            return -1;
+        }
+
+        if (*arg == '\\' || *arg == '/' || *arg == '\0') {
+            int sz = (int) (arg - ws);
+
+            if (sz == 0)
+                return -1;
 
 
-int usr_parse_path(ftp_usr* cl, char* arg, char* d);
-ftp_usr* ftp_usr_new(SOCKET sock, ftp_sv* sv);
-void usr_del(ftp_usr* cl);
-void usr_send(ftp_usr* cl, const char* data);
-void usr_close(ftp_usr* cl);
-int usr_marked_to_del(ftp_usr* cl);
-void usr_select_set(ftp_usr* cl, FD_SET* ReadSet, FD_SET* WriteSet);
-void usr_select_check(ftp_usr* cl, FD_SET* ReadSet, FD_SET* WriteSet);
+            if (ws[0] == '.' && ws[1] == '.' && sz == 2) {
+                int l = (int) strlen(d);
+                for (int i = l - 1; i >= 0; i--) {
+                    if (d[i] == '/') {
+                        d[i == 0 ? 1 : i] = '\0';
+                        break;
+                    }
+                }
+            }
+            else {
+                snprintf(d, CL_MAX_PATH, d[1] == '\0' ? "%s%.*s" : "%s/%.*s", d, sz, ws);
+            }
+
+            ws = arg + 1;
+        }
+
+        arg++;
+    }
+
+    return 0;
+}
+
+ftp_usr* ftp_usr_new(SOCKET sock, ftp_sv* sv) {
+    ftp_usr* cl = (ftp_usr*)calloc(1, sizeof(ftp_usr));
+    if (cl == NULL)
+        return NULL;
+
+    cl->sock = sock;
+    cl->sv = sv;
+    cl->dir[0] = '/';
+
+    printf("(client %p) connected\n", cl);
+
+    usr_send(cl, "220 poryadok u fajlov v kioskah bil vjyat");
+    return cl;
+}
+
+void usr_del(ftp_usr* cl) {
+    printf("(client %p) disconnected\n", cl);
+
+    if (cl->tr)
+        tr_del(cl->tr);
+
+    closesocket(cl->sock);
+
+    free(cl);
+}
+
+void usr_close(ftp_usr* cl) {    
+    cl->closing = 1;
+}
+
+int usr_marked_to_del(ftp_usr* cl) {
+    return cl->closing;
+}
+
+void usr_send(ftp_usr* cl, const char* data) {
+    printf("(client %p) resp:   %s\n", cl, data);
+
+    size_t len_st = strlen(data);
+
+    if (CL_SEND_BUF < cl->sendLen + len_st + 2) {
+        usr_close(cl);
+        return;
+    }
+
+    int len = (int) len_st;
+
+    char* dest = cl->sendBuf + cl->sendLen;
+    memcpy(dest, data, len);
+    dest[len] = '\r';
+    dest[len + 1] = '\n';
+    cl->sendLen += len + 2;
+}
+
+void _usr_on_cmd_rw(ftp_usr* cl, char* cmd) {
+    printf("(client %p) cmd:    %s\n", cl, cmd);
+
+    char* arg = strchr(cmd, ' ');
+
+    if (arg != NULL) {
+        *arg = '\0';
+        arg++;
+    }
+
+    _usr_on_cmd(cl, cmd, arg);
+}
+
+void _usr_handle_recv(ftp_usr* cl) {
+    char buf[CL_MAX_CMD];
+
+    int res = recv(cl->sock, buf, sizeof(buf), MSG_PEEK);
+    if (res == SOCKET_ERROR) {
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+            usr_close(cl);
+        }
+
+        return;
+    }
+
+    if (res == 0) {
+        usr_close(cl);
+        return;
+    }
+
+    for (int i = 0; i < res - 1; i++) {
+        if (buf[i] = '\r' && buf[i + 1] == '\n') {
+            recv(cl->sock, buf, i + 2, 0);
+            buf[i] = '\0';
+            _usr_on_cmd_rw(cl, buf);
+            return;
+        }
+    }
+
+    if (res == sizeof(buf)) {
+        usr_close(cl);
+    }
+}
+
+void _usr_handle_send(ftp_usr* cl) {
+    int res = send(cl->sock, cl->sendBuf, cl->sendLen, 0);
+    if (res == SOCKET_ERROR) {
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+            usr_close(cl);
+        }
+
+        return;
+    }
+
+    memcpy(cl->sendBuf, cl->sendBuf + res, res);
+    cl->sendLen -= res;
+}
+
+void usr_select_set(ftp_usr* cl, FD_SET* ReadSet, FD_SET* WriteSet) {
+    FD_SET(cl->sock, ReadSet);
+
+    if (cl->sendLen) {
+        FD_SET(cl->sock, WriteSet);
+    }
+
+    if (cl->tr)
+        tr_select_set(cl->tr, ReadSet, WriteSet);
+}
+
+void usr_select_check(ftp_usr* cl, FD_SET* ReadSet, FD_SET* WriteSet) {
+    if (FD_ISSET(cl->sock, ReadSet)) {
+        _usr_handle_recv(cl);
+    }
+
+    if (FD_ISSET(cl->sock, WriteSet)) {
+        _usr_handle_send(cl);
+    }
+
+    if (cl->tr) {
+        tr_select_check(cl->tr, ReadSet, WriteSet);
+        if (tr_marked_to_del(cl->tr)) {
+            tr_del(cl->tr);
+            cl->tr = NULL;
+        }
+    }
+}
