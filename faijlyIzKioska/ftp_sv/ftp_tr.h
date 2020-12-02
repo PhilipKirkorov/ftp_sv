@@ -7,6 +7,12 @@ typedef struct ftp_usr ftp_usr;
 
 #define TR_LISTEN 10
 
+enum {
+    TrNone,
+    TrSending,
+    TrReading
+};
+
 typedef struct ftp_tr {
     ftp_usr* cl;
     int closing;
@@ -14,9 +20,9 @@ typedef struct ftp_tr {
     SOCKET sock;
     int action;
     char* sendData;
-    int sendSent;
-    int sendLen;
-    FILE* fd;
+    unsigned int sendSent;
+    unsigned int sendLen;
+    HANDLE fd;
 } ftp_tr;
 
 ftp_tr* ftp_tr_new(ftp_usr* cl);

@@ -6,22 +6,32 @@
 
 void _usr_on_cmd(ftp_usr*, char*, char*);
 
-int usr_parse_path(ftp_usr* cl, char* arg, char* d, int dsize) {
+int usr_parse_path(ftp_usr* cl, char* arg, char* d) {
     if (arg == NULL) {
         return -1;
     }
+
+    size_t len_st = strlen(arg);
+
+    if (len_st >= CL_MAX_PATH)
+        return -1;
+
+    int len = (int)len_st;
 
     if (arg[0] == '/') {
         d[0] = '/';
         d[1] = '\0';
         arg++;
+        len--;
     }
     else {
-        snprintf(d, dsize, cl->dir);
+        snprintf(d, CL_MAX_PATH, cl->dir);
     }
 
-    int len = strlen(arg);
-    if (arg[len - 1] == '/' || arg[len - 1] == '\\')
+    if (len == 0)
+        return 0;
+
+    if (len > 1 && (arg[len - 1] == '/' || arg[len - 1] == '\\'))
         len--;
 
     char* ws = arg;
@@ -39,14 +49,14 @@ int usr_parse_path(ftp_usr* cl, char* arg, char* d, int dsize) {
         }
 
         if (*arg == '\\' || *arg == '/' || *arg == '\0') {
-            int sz = arg - ws;
+            int sz = (int) (arg - ws);
 
             if (sz == 0)
                 return -1;
 
 
             if (ws[0] == '.' && ws[1] == '.' && sz == 2) {
-                int l = strlen(d);
+                int l = (int) strlen(d);
                 for (int i = l - 1; i >= 0; i--) {
                     if (d[i] == '/') {
                         d[i == 0 ? 1 : i] = '\0';
@@ -55,7 +65,7 @@ int usr_parse_path(ftp_usr* cl, char* arg, char* d, int dsize) {
                 }
             }
             else {
-                snprintf(d, dsize, d[1] == '\0' ? "%s%.*s" : "%s/%.*s", d, sz, ws);
+                snprintf(d, CL_MAX_PATH, d[1] == '\0' ? "%s%.*s" : "%s/%.*s", d, sz, ws);
             }
 
             ws = arg + 1;
@@ -68,11 +78,10 @@ int usr_parse_path(ftp_usr* cl, char* arg, char* d, int dsize) {
 }
 
 ftp_usr* ftp_usr_new(SOCKET sock, ftp_sv* sv) {
-    ftp_usr* cl = (ftp_usr*)malloc(sizeof(ftp_usr));
+    ftp_usr* cl = (ftp_usr*)calloc(1, sizeof(ftp_usr));
     if (cl == NULL)
         return NULL;
 
-    memset(cl, 0, sizeof(ftp_usr));
     cl->sock = sock;
     cl->sv = sv;
     cl->dir[0] = '/';
@@ -105,12 +114,14 @@ int usr_marked_to_del(ftp_usr* cl) {
 void usr_send(ftp_usr* cl, const char* data) {
     printf("(client %p) resp:   %s\n", cl, data);
 
-    int len = strlen(data);
+    size_t len_st = strlen(data);
 
-    if (CL_SEND_BUF < cl->sendLen + len + 2) {
+    if (CL_SEND_BUF < cl->sendLen + len_st + 2) {
         usr_close(cl);
         return;
     }
+
+    int len = (int) len_st;
 
     char* dest = cl->sendBuf + cl->sendLen;
     memcpy(dest, data, len);
@@ -122,14 +133,11 @@ void usr_send(ftp_usr* cl, const char* data) {
 void _usr_on_cmd_rw(ftp_usr* cl, char* cmd) {
     printf("(client %p) cmd:    %s\n", cl, cmd);
 
-    char* arg = NULL;
+    char* arg = strchr(cmd, ' ');
 
-    for (int i = 0; i < strlen(cmd); i++) {
-        if (cmd[i] == ' ') {
-            cmd[i] = '\0';
-            arg = cmd + i + 1;
-            break;
-        }
+    if (arg != NULL) {
+        *arg = '\0';
+        arg++;
     }
 
     _usr_on_cmd(cl, cmd, arg);

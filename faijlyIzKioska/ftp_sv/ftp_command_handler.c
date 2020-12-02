@@ -84,7 +84,7 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
             return;
         }
 
-        char d[SV_MAX_ABS_PATH];
+        char d[MAX_PATH];
         snprintf(d, sizeof(d), "%s%s", cl->sv->path, cl->dir);
 
         if (tr_send_list(cl->tr, d) < 0) {
@@ -103,12 +103,12 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
         }
 
         char d[CL_MAX_PATH];
-        if (usr_parse_path(cl, arg, d, sizeof(d)) < 0) {
+        if (usr_parse_path(cl, arg, d) < 0) {
             usr_send(cl, "502 nope");
             return;
         }
         
-        char b[SV_MAX_ABS_PATH];
+        char b[MAX_PATH];
         snprintf(b, sizeof(b), "%s%s", cl->sv->path, d);
 
         if (tr_recv_file(cl->tr, b) < 0) {
@@ -127,12 +127,12 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
         }
 
         char d[CL_MAX_PATH];
-        if (usr_parse_path(cl, arg, d, sizeof(d)) < 0) {
+        if (usr_parse_path(cl, arg, d) < 0) {
             usr_send(cl, "502 nope");
             return;
         }
 
-        char b[SV_MAX_ABS_PATH];
+        char b[MAX_PATH];
         snprintf(b, sizeof(b), "%s%s", cl->sv->path, d);
         
         if (tr_send_file(cl->tr, b) < 0) {
@@ -146,12 +146,12 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
 
     if (strcmp(cmd, "DELE") == 0) {
         char d[CL_MAX_PATH];
-        if (usr_parse_path(cl, arg, d, sizeof(d)) < 0) {
+        if (usr_parse_path(cl, arg, d) < 0) {
             usr_send(cl, "502 nope");
             return;
         }
 
-        char b[SV_MAX_ABS_PATH];
+        char b[MAX_PATH];
         snprintf(b, sizeof(b), "%s%s", cl->sv->path, d);
 
         DeleteFileA(b);
@@ -162,12 +162,12 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
 
     if (strcmp(cmd, "RMD") == 0) {
         char d[CL_MAX_PATH];
-        if (usr_parse_path(cl, arg, d, sizeof(d)) < 0) {
+        if (usr_parse_path(cl, arg, d) < 0) {
             usr_send(cl, "502 nope");
             return;
         }
 
-        char b[SV_MAX_ABS_PATH];
+        char b[MAX_PATH];
         snprintf(b, sizeof(b), "%s%s", cl->sv->path, d);
 
         RemoveDirectoryA(b);
@@ -178,12 +178,12 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
 
     if (strcmp(cmd, "MKD") == 0) {
         char d[CL_MAX_PATH];
-        if (usr_parse_path(cl, arg, d, sizeof(d)) < 0) {
+        if (usr_parse_path(cl, arg, d) < 0) {
             usr_send(cl, "502 nope");
             return;
         }
 
-        char b[SV_MAX_ABS_PATH];
+        char b[MAX_PATH];
         snprintf(b, sizeof(b), "%s%s", cl->sv->path, d);
 
         CreateDirectoryA(b, 0);
@@ -194,12 +194,12 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
 
     if (strcmp(cmd, "CWD") == 0) {
         char d[CL_MAX_PATH];
-        if (usr_parse_path(cl, arg, d, sizeof(d)) < 0) {
+        if (usr_parse_path(cl, arg, d) < 0) {
             usr_send(cl, "502 nope");
             return;
         }
 
-        char b[SV_MAX_ABS_PATH];
+        char b[MAX_PATH];
         snprintf(b, sizeof(b), "%s%s", cl->sv->path, d);
 
         DWORD dwAttrib = GetFileAttributesA(b);
@@ -215,7 +215,7 @@ void _usr_on_cmd(ftp_usr* cl, char* cmd, char* arg) {
     }
 
     if (strcmp(cmd, "CDUP") == 0) {
-        usr_parse_path(cl, "..", cl->dir, sizeof(cl->dir));
+        usr_parse_path(cl, "..", cl->dir);
         usr_send(cl, "250 CWD successful.");
         return;
     }

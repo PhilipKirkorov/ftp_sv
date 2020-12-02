@@ -6,11 +6,10 @@
 #include <stdio.h>
 
 ftp_sv* ftp_sv_new() {
-    ftp_sv* sv = (ftp_sv*)malloc(sizeof(ftp_sv));
+    ftp_sv* sv = (ftp_sv*)calloc(1, sizeof(ftp_sv));
     if (sv == NULL)
         return NULL;
 
-    memset(sv, 0, sizeof(ftp_sv));
     return sv;
 }
 
@@ -27,8 +26,8 @@ void sv_stop(ftp_sv* sv) {
 }
 
 int sv_start(ftp_sv* sv, short port, const char* addr, const char* hostip, const char * path) {
-    int len = strlen(path);
-    if (path[len - 1] == '/' || path[len - 1] == '\\')
+    size_t len = strlen(path);
+    if (len > 0 && (path[len - 1] == '/' || path[len - 1] == '\\'))
         len--;
 
     if (len >= sizeof(sv->path))
