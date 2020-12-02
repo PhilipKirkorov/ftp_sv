@@ -7,7 +7,7 @@ typedef struct ftp_tr ftp_tr;
 
 #define CL_MAX_CMD 1024
 #define CL_MAX_RESP 1024
-#define CL_MAX_PATH 256
+#define CL_MAX_PATH 128
 #define CL_SEND_BUF 2048
 
 typedef struct ftp_usr {
@@ -24,7 +24,7 @@ typedef struct ftp_usr {
 } ftp_usr;
 
 
-int usr_parse_path(ftp_usr* cl, char* arg, char* d, int dsize);
+int usr_parse_path(ftp_usr* cl, char* arg, char* d);
 ftp_usr* ftp_usr_new(SOCKET sock, ftp_sv* sv);
 void usr_del(ftp_usr* cl);
 void usr_send(ftp_usr* cl, const char* data);
