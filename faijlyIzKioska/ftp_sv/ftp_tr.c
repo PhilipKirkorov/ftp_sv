@@ -10,11 +10,10 @@
 #include "ftp_sv.h"
 
 ftp_tr* ftp_tr_new(ftp_usr* cl) {
-    ftp_tr* tr = (ftp_tr*)malloc(sizeof(ftp_tr));
+    ftp_tr* tr = (ftp_tr*)calloc(1, sizeof(ftp_tr));
     if (tr == NULL)
         return NULL;
 
-    memset(tr, 0, sizeof(ftp_tr));
     tr->cl = cl;
 
     printf("(client %p) data connection openned\n", cl);
@@ -29,7 +28,7 @@ void tr_del(ftp_tr* tr) {
         free(tr->sendData);
 
     if (tr->fd)
-        fclose(tr->fd);
+        CloseHandle(tr->fd);
 
     if (tr->sock)
         closesocket(tr->sock);
@@ -98,7 +97,7 @@ int tr_send_list(ftp_tr* tr, const char* dir) {
     if (buf == NULL)
         return -1;
     
-    char d[SV_MAX_ABS_PATH];
+    char d[MAX_PATH];
     snprintf(d, sizeof(d), "%s/*", dir);
 
     WIN32_FIND_DATAA FindFileData;
@@ -110,7 +109,7 @@ int tr_send_list(ftp_tr* tr, const char* dir) {
 
     do
     {
-        char t[512];
+        char t[MAX_PATH + 200];
 
         if (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             snprintf(t, sizeof(t), "d--------- 1 ftp ftp              0 %s\r\n", FindFileData.cFileName);
@@ -123,7 +122,7 @@ int tr_send_list(ftp_tr* tr, const char* dir) {
         }
 
 
-        int len = strlen(t);
+        int len = (int) strlen(t);
 
         if (size + len >= msize) {
             do {
@@ -148,48 +147,48 @@ int tr_send_list(ftp_tr* tr, const char* dir) {
 
     tr->sendData = buf;
     tr->sendLen = size;
-    tr->action = 2;
+    tr->action = TrSending;
 
     return 0;
 }
 
 int tr_send_file(ftp_tr* tr, const char* name) {
-    FILE* fd = fopen(name, "rb");
-    if (fd == NULL)
+    HANDLE hFile = CreateFileA(name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
         return -1;
-
-    fseek(fd, 0L, SEEK_END);
-    int sz = ftell(fd);
-    fseek(fd, 0L, SEEK_SET);
     
-    char* data = (char *) malloc(sz);
+    DWORD fileSize = GetFileSize(hFile, &fileSize);
+    
+    char* data = (char*)malloc(fileSize);
     if (data == NULL) {
-        fclose(fd);
+        CloseHandle(hFile);
         return -1;
     }
 
-    int res = fread(data, 1, sz, fd);
-    fclose(fd);
-
-    if (res != sz) {
+    DWORD rad;
+    if (FALSE == ReadFile(hFile, data, fileSize, &rad, NULL))
+    {
         free(data);
+        CloseHandle(hFile);
         return -1;
     }
 
-    tr->action = 2;
+    CloseHandle(hFile);
+
+    tr->action = TrSending;
     tr->sendData = data;
-    tr->sendLen = sz;
+    tr->sendLen = (unsigned int) fileSize;
 
     return 0;
 }
 
 int tr_recv_file(ftp_tr* tr, const char* name) {
-    FILE* fd = fopen(name, "wb");
-    if (fd == NULL)
+    HANDLE hFile = CreateFileA(name, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == NULL)
         return -1;
 
-    tr->action = 1;
-    tr->fd = fd;
+    tr->action = TrReading;
+    tr->fd = hFile;
 
     return 0;
 }
@@ -228,8 +227,11 @@ void _tr_handle_recv(ftp_tr* tr) {
         tr_close(tr);
     }
 
-    if (fwrite(buf, 1, res, tr->fd) != res)
+    DWORD ret;
+    WriteFile(tr->fd, buf, res, &ret, NULL);
+    if (ret != res)
         tr_close(tr);
+     
 }
 
 void _tr_handle_accept(ftp_tr* tr) {
@@ -258,8 +260,8 @@ void tr_select_set(ftp_tr* tr, FD_SET* ReadSet, FD_SET* WriteSet) {
         return;
     }
 
-    if (tr->action > 0)
-        FD_SET(tr->sock, tr->action == 1 ? ReadSet : WriteSet);
+    if (tr->action != TrNone)
+        FD_SET(tr->sock, tr->action == TrReading ? ReadSet : WriteSet);
 }
 
 void tr_select_check(ftp_tr* tr, FD_SET* ReadSet, FD_SET* WriteSet) {
@@ -270,12 +272,12 @@ void tr_select_check(ftp_tr* tr, FD_SET* ReadSet, FD_SET* WriteSet) {
         return;
     }
 
-    if (tr->action > 0 && FD_ISSET(tr->sock, tr->action == 1 ? ReadSet : WriteSet)) {
+    if (tr->action != TrNone && FD_ISSET(tr->sock, tr->action == TrReading ? ReadSet : WriteSet)) {
 
-        if (tr->action == 2) {
+        if (tr->action == TrSending) {
             _tr_handle_send(tr);
         }
-        else if (tr->action == 1) {
+        else if (tr->action == TrReading) {
             _tr_handle_recv(tr);
         }
     }
