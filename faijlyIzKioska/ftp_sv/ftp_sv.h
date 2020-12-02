@@ -3,7 +3,6 @@
 #include <winsock2.h>
 
 #define SV_MAX_CLIENTS 128
-#define SV_MAX_ABS_PATH 512
 #define SV_LISTEN 10
 
 typedef struct ftp_usr ftp_usr;
@@ -15,7 +14,7 @@ typedef struct ftp_sv {
     int clientsCount;
 
     char ip[4];
-    char path[SV_MAX_ABS_PATH];
+    char path[MAX_PATH];
 } ftp_sv;
 
 ftp_sv* ftp_sv_new();
